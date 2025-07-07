@@ -1,12 +1,11 @@
 """
 This script builds the graph database using Kuzu using the FHIR JSON data extracted by BAML.
 """
+
 import shutil
+
 import kuzu
 import polars as pl
-
-DB_NAME = "fhir_kuzu_db"
-DATA_PATH = "../data/results/extracted_fhir_1_100.jsonl"
 
 
 def setup_db() -> kuzu.Connection:
@@ -14,7 +13,9 @@ def setup_db() -> kuzu.Connection:
     db = kuzu.Database(DB_NAME)
     conn = kuzu.Connection(db)
     # -- Nodes --
-    conn.execute("CREATE NODE TABLE Allergy(id STRING PRIMARY KEY, category STRING, manifestation STRING)")
+    conn.execute(
+        "CREATE NODE TABLE Allergy(id STRING PRIMARY KEY, category STRING, manifestation STRING)"
+    )
     conn.execute("CREATE NODE TABLE Substance(name STRING PRIMARY KEY)")
     conn.execute(
         """
@@ -24,7 +25,7 @@ def setup_db() -> kuzu.Connection:
             gender_inferred STRING,
             surname STRING,
             givenName STRING,
-            birthDate STRING,
+            birthDate DATE,
             phone STRING,
             email STRING,
             maritalStatus STRING,
@@ -49,7 +50,7 @@ def setup_db() -> kuzu.Connection:
         CREATE NODE TABLE Immunization(
             id STRING PRIMARY KEY,
             status STRING,
-            occurrenceDateTime STRING,
+            occurrenceDateTime TIMESTAMP,
             traits STRING
         )
         """
@@ -97,7 +98,7 @@ def prep_patient_df(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("name").struct.field("prefix"),
         pl.col("name").struct.field("family").alias("surname"),
         pl.col("name").struct.field("given").list.join(separator=" ").alias("givenName"),
-        pl.col("birthDate"),
+        pl.col("birthDate").alias("birthDate"),
         pl.col("phone"),
         pl.col("email"),
         pl.col("maritalStatus"),
@@ -125,16 +126,27 @@ def prep_practitioner_df(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def prep_substance_df(df: pl.DataFrame) -> pl.DataFrame:
-    df_substance = df.select("record_id", "allergy").unnest("allergy").filter(pl.col("substance").is_not_null())
+    df_substance = (
+        df.select("record_id", "allergy")
+        .unnest("allergy")
+        .filter(pl.col("substance").is_not_null())
+    )
     df_substance = (
         df_substance.explode("substance")
         .with_columns(
-            pl.col("substance").struct.field("manifestation").list.join(separator=", ").alias("manifestation"),
+            pl.col("substance")
+            .struct.field("manifestation")
+            .list.join(separator=", ")
+            .alias("manifestation"),
             pl.concat_str(
                 [
                     pl.col("record_id"),
-                    pl.coalesce(pl.col("substance").struct.field("category"), pl.lit("unknown")).str.to_lowercase(),
-                    pl.coalesce(pl.col("substance").struct.field("name"), pl.lit("unknown")).str.to_lowercase(),
+                    pl.coalesce(
+                        pl.col("substance").struct.field("category"), pl.lit("unknown")
+                    ).str.to_lowercase(),
+                    pl.coalesce(
+                        pl.col("substance").struct.field("name"), pl.lit("unknown")
+                    ).str.to_lowercase(),
                 ],
                 separator="_",
             )
@@ -159,7 +171,7 @@ def prep_immunization_df(df: pl.DataFrame) -> pl.DataFrame:
         .unnest("immunization")
         .with_columns(
             pl.col("traits").list.join(separator=", ").alias("traits"),
-            pl.col("occurrenceDateTime").str.to_lowercase().alias("occurrenceDateTime"),
+            pl.col("occurrenceDateTime"),
             pl.concat_str(
                 [
                     pl.col("record_id"),
@@ -218,7 +230,7 @@ def ingest_patient_nodes(conn: kuzu.Connection, df_patient: pl.DataFrame) -> Non
             p.gender_inferred = gender_inferred,
             p.surname = surname,
             p.givenName = givenName,
-            p.birthDate = birthDate,
+            p.birthDate = CAST(birthDate AS DATE),
             p.phone = phone,
             p.email = email,
             p.maritalStatus = maritalStatus,
@@ -307,13 +319,12 @@ def ingest_immunization_nodes(conn: kuzu.Connection, df_immunization: pl.DataFra
         LOAD FROM df_immunization
         MERGE (i:Immunization {id: id})
         SET i.status = status,
-            i.occurrenceDateTime = occurrenceDateTime,
+            i.occurrenceDateTime = CAST(occurrenceDateTime AS TIMESTAMP),
             i.traits = traits
         RETURN COUNT(*) AS num_immunizations
         """
     )
     print(res.get_as_pl())  # type: ignore  # type: ignore
-
 
 
 def ingest_experiences_allergy(conn: kuzu.Connection, df_substance: pl.DataFrame) -> None:
@@ -354,9 +365,9 @@ def ingest_has_immunization(conn: kuzu.Connection, df_immunization: pl.DataFrame
     print(res.get_as_pl())  # type: ignore
 
 
-def main() -> None:
+def main(data_path: str) -> None:
     conn = setup_db()
-    df = pl.read_ndjson(DATA_PATH)
+    df = pl.read_json(DATA_PATH)
     # Prepare DataFrames
     df_address = prep_address_df(df)
     df_patient = prep_patient_df(df)
@@ -379,4 +390,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    DB_NAME = "fhir_kuzu_db"
+    DATA_PATH = "../data/results/extracted_fhir_1_200.json"
+    main(DATA_PATH)
