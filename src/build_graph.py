@@ -98,7 +98,11 @@ def prep_patient_df(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("name").struct.field("prefix"),
         pl.col("name").struct.field("family").alias("surname"),
         pl.col("name").struct.field("given").list.join(separator=" ").alias("givenName"),
-        pl.col("birthDate").alias("birthDate"),
+        # Handle year-only dates by appending "-01-01" if it's just a 4-digit year
+        pl.when(pl.col("birthDate").str.len_chars() == 4)
+        .then(pl.col("birthDate") + "-01-01")
+        .otherwise(pl.col("birthDate"))
+        .alias("birthDate"),
         pl.col("phone"),
         pl.col("email"),
         pl.col("maritalStatus"),
@@ -171,7 +175,13 @@ def prep_immunization_df(df: pl.DataFrame) -> pl.DataFrame:
         .unnest("immunization")
         .with_columns(
             pl.col("traits").list.join(separator=", ").alias("traits"),
-            pl.col("occurrenceDateTime"),
+            # Convert timezone-aware timestamps to UTC, strip timezone info for Kuzu compatibility
+            pl.col("occurrenceDateTime")
+            .str.strptime(pl.Datetime, format="%Y-%m-%dT%H:%M:%S%z", strict=False)
+            .dt.replace_time_zone("UTC")
+            .dt.replace_time_zone(None)
+            .cast(pl.Utf8)
+            .alias("occurrenceDateTime"),
             pl.concat_str(
                 [
                     pl.col("record_id"),
@@ -391,5 +401,5 @@ def main(data_path: str) -> None:
 
 if __name__ == "__main__":
     DB_NAME = "fhir_kuzu_db"
-    DATA_PATH = "../data/results/extracted_fhir_1_200.json"
+    DATA_PATH = "../data/extracted_fhir.json"
     main(DATA_PATH)
