@@ -671,7 +671,7 @@ if __name__ == "__main__":
         "--results_file",
         "-r",
         type=str,
-        default="../data/results/extracted_fhir.json",
+        default="../data/extracted_fhir.json",
         help="Path to the results file.",
     )
     args = parser.parse_args()
