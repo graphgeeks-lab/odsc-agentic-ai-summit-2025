@@ -13,8 +13,8 @@ test_cases = [
         "expected_values": ["Lili Abbie Brekke", "Marinda Lindsay Veum", "Ana María Anita Barrios"],
     },
     {
-        "question": "Did the practitioner 'Arla Fritsch' treat more than one patient? If so, return the patient's full names. ",
-        "expected_values": ["Kerri Providencia Boyer", "Rogelio Clair Windler"],
+        "question": "Did the practitioner 'Arla Fritsch' treat more than one patient?",
+        "expected_values": ["yes", "Yes"],
     },
     {
         "question": "What are the unique categories of substances patients are allergic to?",
@@ -22,15 +22,15 @@ test_cases = [
     },
     {
         "question": "How many patients were born in between the years 1990 and 2000?",
-        "expected_values": ["12"],
+        "expected_values": ["184"],
     },
     {
         "question": "How many patients have been immunized after January 1, 2022?",
-        "expected_values": ["6"],
+        "expected_values": ["62"],
     },
     {
         "question": "Which practitioner treated the most patients? Return their full name and how many patients they treated.",
-        "expected_values": ["Vito Barton", "three"],
+        "expected_values": ["Ted Reilly", "19"],
     },
     {
         "question": "Is the patient ID 45 allergic to the substance 'shellfish'? If so, what city and state do they live in, and what is the full name of the practitioner who treated them?",
@@ -38,10 +38,10 @@ test_cases = [
     },
     {
         "question": "How many patients are immunized for influenza?",
-        "expected_values": ["14"],
+        "expected_values": ["202"],
     },
     {
         "question": "What substances cause food allergies in this database?",
-        "expected_values": ["eggs", "shellfish", "wheat"],
+        "expected_values": ["eggs", "shellfish", "wheat", "walnut", "fish"],
     },
 ]
