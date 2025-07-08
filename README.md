@@ -89,7 +89,14 @@ The Kuzu graph is stored in the `fhir_kuzu_db` directory, and can be visualized 
 Once the graph is created, we will build a Graph RAG pipeline (also powered by BAML) that uses the
 graph to answer questions about the patient data.
 
-🚧 TBD.
+See the [Graph RAG script](src/graphrag.py).
+
+```bash
+cd src
+uv run graphrag.py
+```
+
+This runs a vanilla Graph RAG pipeline that uses the graph to answer questions about the patient data.
 
 ### Agents & workflow orchestration
 
@@ -109,22 +116,38 @@ Evaluation consists of two parts:
 The evaluation data in `data/fhir.json` is used to evaluate the
 quality of results from the information extraction pipeline in BAML.
 
-🚧 TBD.
+See the [evaluation script](src/baml_extract_eval.py).
+
+```bash
+cd src
+uv run baml_extract_eval.py
+```
 
 #### Graph RAG and agent pipeline evaluation
 
+🚧 TBD.
 
 ## Graph visualization
 
 Once the graph has been created in Kuzu, you can visualize it using the
 [Kuzu Explorer](https://docs.kuzudb.com/visualization/kuzu-explorer/#what-is-kuzu-explorer)tool.
 
-Use the provided `docker-compose.yml` configured with the relative path to your data and start/stop the container as follows:
+Use the provided `docker-compose.yml` configured with the relative path to your data, and
+start the Docker container for Kuzu explorer as follows:
 
 ```bash
 docker compose up
 ```
 
+Once finished, spin down the Kuzu Explorer container:
+
 ```bash
 docker compose down
 ```
+
+You can view multi-hop paths in the graph as follows:
+```cypher
+MATCH (a)-[r*1..4]-(b) RETURN * LIMIT 500;
+```
+
+![](./assets/fhir-graph-paths.png)
