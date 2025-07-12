@@ -1,5 +1,7 @@
 """
-This script builds the graph database using Kuzu using the FHIR JSON data extracted by BAML.
+This script builds a knowledge graph using the FHIR JSON data extracted by BAML.
+
+The graph is persisted to Kuzu, an embedded graph database.
 """
 
 import shutil

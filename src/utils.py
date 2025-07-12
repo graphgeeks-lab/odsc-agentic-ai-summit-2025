@@ -1,7 +1,6 @@
 """
 Utility functions for the Graph RAG pipeline.
 """
-from typing import Optional
 
 import kuzu
 
@@ -9,8 +8,9 @@ from baml_client import b
 
 # --- Database ---
 
-class DatabaseManager:
-    """Manages Kuzu database connection and vector index setup."""
+
+class KuzuDatabaseManager:
+    """Manages Kuzu database connection and schema retrieval."""
 
     def __init__(self, db_path: str = "ex_kuzu_db"):
         self.db_path = db_path
