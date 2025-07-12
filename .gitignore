@@ -178,3 +178,6 @@ src/baml_client/*
 data/*.parquet
 data/results/*
 src/fhir_kuzu_db
+src/fhir_lance_db
+debug.py
+test.py
