@@ -60,10 +60,6 @@ async def process_record(record: Dict[str, str]) -> Dict[str, Any]:
     immunization_result = await extract_immunization(record)
     if not all(v is None for v in immunization_result):
         patient_result["immunization"] = immunization_result
-    # Allergy
-    allergy_result = await extract_allergy(record)
-    if allergy_result.get("substance"):
-        patient_result["allergy"] = allergy_result
     return patient_result
 
 
