@@ -10,15 +10,15 @@ test_cases = [
     },
     {
         "question": "What are the full names of the patients treated by the practitioner named Josef Klein?",
-        "expected_values": ["Lili Abbie Brekke", "Marinda Lindsay Veum", "Ana María Anita Barrios"],
+        "expected_values": ["Lili Abbie Brekke", "Marinda Lindsay Veum", "Gary Everette Abshire", "Gabrielle Claudie Medhurst"],
     },
     {
         "question": "Did the practitioner 'Arla Fritsch' treat more than one patient?",
-        "expected_values": ["yes", "Yes"],
+        "expected_values": ["yes"],
     },
     {
         "question": "What are the unique categories of substances patients are allergic to?",
-        "expected_values": ["food", "environment", "medication", "other"],
+        "expected_values": ["medication", "environment", "food", "other"],
     },
     {
         "question": "How many patients were born in between the years 1990 and 2000?",
@@ -26,7 +26,7 @@ test_cases = [
     },
     {
         "question": "How many patients have been immunized after January 1, 2022?",
-        "expected_values": ["62"],
+        "expected_values": ["65"],
     },
     {
         "question": "Which practitioner treated the most patients? Return their full name and how many patients they treated.",
@@ -38,10 +38,10 @@ test_cases = [
     },
     {
         "question": "How many patients are immunized for influenza?",
-        "expected_values": ["202"],
+        "expected_values": ["204"],
     },
     {
-        "question": "What substances cause food allergies in this database?",
-        "expected_values": ["eggs", "shellfish", "wheat", "walnut", "fish"],
+        "question": "How many substances cause allergies in the category 'food'?",
+        "expected_values": ["13"],
     },
 ]

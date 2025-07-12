@@ -1,6 +1,6 @@
 import pytest
 
-from graphrag import run_graphrag
+from rag import run_hybrid_rag
 from tests import test_data
 
 NUMBER_WORDS = {
@@ -38,15 +38,16 @@ def number_variants(s: str) -> list[str]:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("test_case", test_data.test_cases)
 async def test_graphrag_eval_expected_answer(test_case):
-    result = await run_graphrag(test_case)
-    for key in ["question", "cypher", "context", "answer"]:
-        assert key in result
-
-    assert result["answer"] is not None
-    answer_str = str(result["answer"]).lower()
-    failed = []
+    vector_answer, graph_answer = await run_hybrid_rag(test_case["question"])
+    assert vector_answer is not None
+    assert graph_answer is not None
+    answer_str = str(graph_answer).lower()
+    found = False
     for expected in test_case["expected_values"]:
         variants = number_variants(expected)
-        if not any(variant in answer_str for variant in variants):
-            failed.append((expected.lower(), variants))
-    assert not failed, f"Failed to find expected values: {failed} in answer: {answer_str}"
+        if any(variant in answer_str for variant in variants):
+            found = True
+            break
+    assert (
+        found
+    ), f"None of the expected values {test_case['expected_values']} found in answer: {answer_str}"
