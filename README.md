@@ -123,13 +123,14 @@ cd src
 uv run baml_extract_eval.py
 ```
 
-#### Graph RAG and agent pipeline evaluation
+#### Graph, vector and FTS-based (hybrid) RAG and agent pipeline evaluation
 
-🚧 TBD.
+We evaluate the RAG system that consists of a combination of graph, vector and FTS-based RAG
+using the [Opik](https://www.comet.com/site/products/opik/) observability tool.
 
 ## Graph visualization
 
-Once the graph has been created in Kuzu, you can visualize it using the
+Once the knowledge graph has been created in Kuzu, you can visualize it using the
 [Kuzu Explorer](https://docs.kuzudb.com/visualization/kuzu-explorer/#what-is-kuzu-explorer)tool.
 
 Use the provided `docker-compose.yml` configured with the relative path to your data, and
