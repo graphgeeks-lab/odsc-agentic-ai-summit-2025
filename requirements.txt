@@ -1,5 +1,5 @@
 baml-py==0.201.0
-kuzu==0.10.1
+kuzu==0.11.0
 polars==1.31.0
 pyarrow==20.0.0
 pydantic==2.11.7

@@ -51,7 +51,16 @@ async def generate_response(question: str) -> str | None:
 
 async def main() -> None:
     questions = [
-        "How many patients with the last name 'Rosenbaum' received multiple immunizations?",
+        # "How many patients with the last name 'Rosenbaum' received multiple immunizations?",
+        "What are the full names of the patients treated by the practitioner named Josef Klein?",
+        "Did the practitioner 'Arla Fritsch' treat more than one patient?",
+        "What are the unique categories of substances patients are allergic to?",
+        "How many patients were born in between the years 1990 and 2000?",
+        "How many patients have been immunized after January 1, 2022?",
+        "Which practitioner treated the most patients? Return their full name and how many patients they treated.",
+        "Is the patient ID 45 allergic to the substance 'shellfish'? If so, what city and state do they live in, and what is the full name of the practitioner who treated them?",
+        "How many patients are immunized for influenza?",
+        "How many substances cause allergies in the category 'food'?",
     ]
     for question in questions:
         result = await generate_response(question)  # type: ignore

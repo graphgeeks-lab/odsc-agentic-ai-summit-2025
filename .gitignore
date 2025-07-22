@@ -177,7 +177,7 @@ cython_debug/
 src/baml_client/*
 data/*.parquet
 data/results/*
-src/fhir_kuzu_db
+fhir_db.kuzu*
 src/fhir_lance_db
 debug.py
 test.py
