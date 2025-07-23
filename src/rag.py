@@ -9,12 +9,15 @@ import os
 from textwrap import dedent
 
 import lancedb
+import opik
+from opik import opik_context
 from dotenv import load_dotenv
 from lancedb.embeddings import get_registry
 from lancedb.rerankers import RRFReranker
 
 import utils
 from baml_client.async_client import b
+from baml_py import Collector
 
 load_dotenv()
 os.environ["BAML_LOG"] = "WARN"
@@ -26,11 +29,38 @@ kuzu_db_manager = utils.KuzuDatabaseManager("fhir_db.kuzu")
 os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
 
 
+@opik.track(flush=True)
 async def prune_schema(question: str) -> str:
+    collector = Collector(name="prune_schema_collector")
+    function_logs = collector.logs
+    assert len(function_logs) == 0
+
     schema = kuzu_db_manager.get_schema_dict
     schema_xml = kuzu_db_manager.get_schema_xml(schema)
-    pruned_schema = await b.PruneSchema(schema_xml, question)
+
+    pruned_schema = await b.PruneSchema(schema_xml, question, baml_options={"collector": [collector]})
+
+    function_logs = collector.logs
+    assert len(function_logs) == 1
+
+    log = collector.last
+    assert log is not None
+
+    calls = log.calls
+    assert len(calls) == 1
+    call = calls[0]
+
     pruned_schema_xml = kuzu_db_manager.get_schema_xml(pruned_schema.model_dump())
+
+    opik_context.update_current_span(
+        name="pruned_schema",
+        metadata={
+            "function_name": log.function_name,
+        },
+        provider=call.provider,
+        model=call.client_name,
+    )
+
     print("Generated pruned schema XML")
     return pruned_schema_xml
 
@@ -99,6 +129,7 @@ async def get_graph_answer(question, pruned_schema_xml, important_entities):
     return await execute_graph_rag(question, pruned_schema_xml, important_entities)
 
 
+@opik.track(flush=True)
 async def run_hybrid_rag(question: str) -> tuple[str, str]:
     print(f"---\nQ: {question}")
     pruned_schema_xml = await prune_schema(question)
