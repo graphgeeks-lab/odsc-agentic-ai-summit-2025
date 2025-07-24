@@ -9,6 +9,7 @@ import asyncio
 import os
 
 import opik
+from opik import opik_context
 from dotenv import load_dotenv
 from openai import OpenAI
 from opik.integrations.openai import track_openai
@@ -46,9 +47,28 @@ else:
 
 
 @opik.track
-async def generate_response(question: str) -> str | None:
+async def generate_response(question: str, question_number: int = None) -> str | None:
     graph_answer, vector_answer = await run_hybrid_rag(question)
     synthesized_answer = await b.SynthesizeAnswers(question, vector_answer, graph_answer)
+    
+    # Update the current trace with overall workflow information
+    trace_name = f"RAG Evaluation - Question {question_number}" if question_number else "RAG Evaluation"
+    opik_context.update_current_trace(
+        name=trace_name,
+        input={"question": question},
+        output={"final_answer": synthesized_answer},
+        metadata={
+            "workflow_type": "rag_evaluation",
+            "question_number": question_number,
+            "vector_answer_length": len(vector_answer),
+            "graph_answer_length": len(graph_answer),
+            "synthesized_answer_length": len(synthesized_answer),
+            "has_vector_answer": bool(vector_answer),
+            "has_graph_answer": bool(graph_answer),
+        },
+        tags=["rag", "evaluation", "fhir", "healthcare"]
+    )
+    
     return synthesized_answer
 
 
@@ -65,8 +85,8 @@ async def main() -> None:
         "How many patients are immunized for influenza?",
         "How many substances cause allergies in the category 'food'?",
     ]
-    for question in questions:
-        result = await generate_response(question)  # type: ignore
+    for i, question in enumerate(questions, 1):
+        result = await generate_response(question, question_number=i)  # type: ignore
         print(result)
 
 

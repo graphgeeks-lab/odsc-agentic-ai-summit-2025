@@ -101,6 +101,7 @@ async def execute_graph_rag(question: str, schema_xml: str, important_entities: 
         name="execute_graph_rag",
         metadata={
             "cypher_generated": bool(response_cypher.cypher),
+            "cypher":response_cypher.cypher,
             "result_count": len(result) if result else 0,
         }
     )
@@ -234,21 +235,30 @@ async def synthesize_answers(question: str, vector_answer: str, graph_answer: st
 
 
 @opik.track(flush=True)
-async def main(question: str) -> None:
+async def main(question: str, question_number: int = None) -> None:
     vector_answer, graph_answer = await run_hybrid_rag(question)
     print(f"A1: {vector_answer}A2: {graph_answer}")
     synthesized_answer = await synthesize_answers(question, vector_answer, graph_answer)
     print(f"Final answer: {synthesized_answer}")
     
-    # Update opik context with main workflow summary
-    opik_context.update_current_span(
-        name="main",
+
+    
+    # Update the current trace with overall workflow information
+    trace_name = f"RAG Workflow - Question {question_number}" if question_number else "RAG Workflow"
+    opik_context.update_current_trace(
+        name=trace_name,
+        input={"question": question},
+        output={"final_answer": synthesized_answer},
         metadata={
-            "question": question,
+            "workflow_type": "hybrid_rag",
+            "question_number": question_number,
             "vector_answer_length": len(vector_answer),
             "graph_answer_length": len(graph_answer),
             "synthesized_answer_length": len(synthesized_answer),
+            "has_vector_answer": bool(vector_answer),
+            "has_graph_answer": bool(graph_answer),
         },
+        tags=["rag", "hybrid", "fhir", "healthcare"]
     )
 
 
@@ -265,5 +275,5 @@ if __name__ == "__main__":
         "How many patients are immunized for influenza?",
         "How many substances cause allergies in the category 'food'?",
     ]
-    for question in questions:
-        asyncio.run(main(question)) 
+    for i, question in enumerate(questions, 1):
+        asyncio.run(main(question, question_number=i)) 
