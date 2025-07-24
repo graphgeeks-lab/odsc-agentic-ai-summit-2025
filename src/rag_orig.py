@@ -2,8 +2,6 @@
 Tools for running RAG workflows on the FHIR graph database
 - Graph-based RAG (Kuzu)
 - Vector and FTS-based RAG (LanceDB)
-
-Refactored version using BAML instrumentation utilities.
 """
 
 import asyncio
@@ -19,7 +17,7 @@ from lancedb.rerankers import RRFReranker
 
 import utils
 from baml_client.async_client import b
-from baml_instrumentation import BAMLInstrumentation, track_baml_call
+from baml_py import Collector
 
 load_dotenv()
 os.environ["BAML_LOG"] = "WARN"
@@ -33,44 +31,104 @@ os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
 
 @opik.track(flush=True)
 async def prune_schema(question: str) -> str:
+    # Initialize BAML Collector
+    collector = Collector(name="prune_schema_collector")
+    function_logs = collector.logs
+    assert len(function_logs) == 0
+
     schema = kuzu_db_manager.get_schema_dict
     schema_xml = kuzu_db_manager.get_schema_xml(schema)
 
-    pruned_schema = await track_baml_call(
-        b.PruneSchema,
-        "prune_schema_collector",
-        "pruned_schema",
-        schema_xml,
-        question
-    )
+    pruned_schema = await b.PruneSchema(schema_xml, question, baml_options={"collector": [collector]})
+
+    # Now that we have the pruned schema, verify that the collector has a log
+    function_logs = collector.logs
+    assert len(function_logs) == 1
+
+    # Verify that the last log is the one we expect
+    log = collector.last
+    assert log is not None
+    assert log.log_type == "call"
+
+    # Verify calls
+    calls = log.calls
+    assert len(calls) == 1
+
+    # Get last call
+    call = calls[0]
+
+    # Verify timing fields
+    call_timing = call.timing
+    assert call_timing.start_time_utc_ms > 0
+    assert call_timing.duration_ms is not None and call_timing.duration_ms > 0
+
+    # Verify call usage
+    call_usage = call.usage
+    assert call_usage.input_tokens is not None and call_usage.input_tokens > 0
+    assert call_usage.output_tokens is not None and call_usage.output_tokens > 0
+    # AND it matches the log usage
+    assert call_usage.input_tokens == log.usage.input_tokens
+    assert call_usage.output_tokens == log.usage.output_tokens
 
     pruned_schema_xml = kuzu_db_manager.get_schema_xml(pruned_schema.model_dump())
+
+    # Update opik context
+    opik_context.update_current_span(
+        name="pruned_schema",
+        metadata={
+            "function_name": log.function_name,
+            "duration_ms": call_timing.duration_ms,
+        },
+        usage={
+            "prompt_tokens": call_usage.input_tokens,
+            "completion_tokens": call_usage.output_tokens,
+            "total_tokens": call_usage.input_tokens + call_usage.output_tokens,
+        },
+        provider=call.provider,
+        model=call.client_name,
+    )
+
     print("Generated pruned schema XML")
     return pruned_schema_xml
 
 
 @opik.track(flush=True)
 async def answer_question(question: str, context: str) -> str:
-    answer = await track_baml_call(
-        b.AnswerQuestion,
-        "answer_question_collector",
-        "answer_question",
-        question,
-        context
-    )
+    # Initialize BAML Collector
+    collector = Collector(name="answer_question_collector")
+    
+    answer = await b.AnswerQuestion(question, context, baml_options={"collector": [collector]})
+    
+    # Update opik context with BAML data
+    if collector.last is not None:
+        log = collector.last
+        call = log.calls[0] if log.calls else None
+        
+        if call and call.usage:
+            opik_context.update_current_span(
+                name="answer_question",
+                metadata={
+                    "function_name": log.function_name,
+                    "duration_ms": call.timing.duration_ms if call.timing else None,
+                },
+                usage={
+                    "prompt_tokens": call.usage.input_tokens,
+                    "completion_tokens": call.usage.output_tokens,
+                    "total_tokens": (call.usage.input_tokens or 0) + (call.usage.output_tokens or 0),
+                },
+                provider=call.provider,
+                model=call.client_name,
+            )
+    
     return answer
 
 
 @opik.track(flush=True)
 async def execute_graph_rag(question: str, schema_xml: str, important_entities: str) -> str:
-    response_cypher = await track_baml_call(
-        b.Text2Cypher,
-        "execute_graph_rag_collector",
-        "execute_graph_rag",
-        question,
-        schema_xml,
-        important_entities
-    )
+    # Initialize BAML Collector
+    collector = Collector(name="execute_graph_rag_collector")
+    
+    response_cypher = await b.Text2Cypher(question, schema_xml, important_entities, baml_options={"collector": [collector]})
     
     if response_cypher.cypher:
         # Run the Cypher query on the graph database
@@ -96,14 +154,28 @@ async def execute_graph_rag(question: str, schema_xml: str, important_entities: 
         """
     )
     
-    # Update opik context with additional metadata
-    opik_context.update_current_span(
-        name="execute_graph_rag",
-        metadata={
-            "cypher_generated": bool(response_cypher.cypher),
-            "result_count": len(result) if result else 0,
-        }
-    )
+    # Update opik context with BAML data
+    if collector.last is not None:
+        log = collector.last
+        call = log.calls[0] if log.calls else None
+        
+        if call and call.usage:
+            opik_context.update_current_span(
+                name="execute_graph_rag",
+                metadata={
+                    "function_name": log.function_name,
+                    "duration_ms": call.timing.duration_ms if call.timing else None,
+                    "cypher_generated": bool(response_cypher.cypher),
+                    "result_count": len(result) if result else 0,
+                },
+                usage={
+                    "prompt_tokens": call.usage.input_tokens,
+                    "completion_tokens": call.usage.output_tokens,
+                    "total_tokens": (call.usage.input_tokens or 0) + (call.usage.output_tokens or 0),
+                },
+                provider=call.provider,
+                model=call.client_name,
+            )
     
     answer = await answer_question(question, context)
     return answer
@@ -170,14 +242,33 @@ async def get_graph_answer(question, pruned_schema_xml, important_entities):
 
 @opik.track(flush=True)
 async def extract_entity_keywords(question: str, pruned_schema_xml: str):
-    entities = await track_baml_call(
-        b.ExtractEntityKeywords,
-        "extract_entity_keywords_collector",
-        "extract_entity_keywords",
-        question,
-        pruned_schema_xml,
-        additional_metadata={"entities_extracted": lambda: len(entities)}
-    )
+    # Initialize BAML Collector
+    collector = Collector(name="extract_entity_keywords_collector")
+    
+    entities = await b.ExtractEntityKeywords(question, pruned_schema_xml, baml_options={"collector": [collector]})
+    
+    # Update opik context with BAML data
+    if collector.last is not None:
+        log = collector.last
+        call = log.calls[0] if log.calls else None
+        
+        if call and call.usage:
+            opik_context.update_current_span(
+                name="extract_entity_keywords",
+                metadata={
+                    "function_name": log.function_name,
+                    "duration_ms": call.timing.duration_ms if call.timing else None,
+                    "entities_extracted": len(entities),
+                },
+                usage={
+                    "prompt_tokens": call.usage.input_tokens,
+                    "completion_tokens": call.usage.output_tokens,
+                    "total_tokens": (call.usage.input_tokens or 0) + (call.usage.output_tokens or 0),
+                },
+                provider=call.provider,
+                model=call.client_name,
+            )
+    
     return entities
 
 
@@ -222,14 +313,32 @@ async def run_hybrid_rag(question: str) -> tuple[str, str]:
 
 @opik.track(flush=True)
 async def synthesize_answers(question: str, vector_answer: str, graph_answer: str) -> str:
-    synthesized_answer = await track_baml_call(
-        b.SynthesizeAnswers,
-        "synthesize_answers_collector",
-        "synthesize_answers",
-        question,
-        vector_answer,
-        graph_answer
-    )
+    # Initialize BAML Collector
+    collector = Collector(name="synthesize_answers_collector")
+    
+    synthesized_answer = await b.SynthesizeAnswers(question, vector_answer, graph_answer, baml_options={"collector": [collector]})
+    
+    # Update opik context with BAML data
+    if collector.last is not None:
+        log = collector.last
+        call = log.calls[0] if log.calls else None
+        
+        if call and call.usage:
+            opik_context.update_current_span(
+                name="synthesize_answers",
+                metadata={
+                    "function_name": log.function_name,
+                    "duration_ms": call.timing.duration_ms if call.timing else None,
+                },
+                usage={
+                    "prompt_tokens": call.usage.input_tokens,
+                    "completion_tokens": call.usage.output_tokens,
+                    "total_tokens": (call.usage.input_tokens or 0) + (call.usage.output_tokens or 0),
+                },
+                provider=call.provider,
+                model=call.client_name,
+            )
+    
     return synthesized_answer
 
 
@@ -266,4 +375,4 @@ if __name__ == "__main__":
         "How many substances cause allergies in the category 'food'?",
     ]
     for question in questions:
-        asyncio.run(main(question)) 
+        asyncio.run(main(question))
