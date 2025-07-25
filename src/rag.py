@@ -2,8 +2,6 @@
 Tools for running RAG workflows on the FHIR graph database
 - Graph-based RAG (Kuzu)
 - Vector and FTS-based RAG (LanceDB)
-
-Refactored version using BAML instrumentation utilities.
 """
 
 import asyncio
@@ -11,15 +9,12 @@ import os
 from textwrap import dedent
 
 import lancedb
-import opik
-from opik import opik_context
 from dotenv import load_dotenv
 from lancedb.embeddings import get_registry
 from lancedb.rerankers import RRFReranker
 
 import utils
 from baml_client.async_client import b
-from baml_instrumentation import BAMLInstrumentation, track_baml_call
 
 load_dotenv()
 os.environ["BAML_LOG"] = "WARN"
@@ -31,46 +26,27 @@ kuzu_db_manager = utils.KuzuDatabaseManager("fhir_db.kuzu")
 os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
 
 
-@opik.track(flush=True)
 async def prune_schema(question: str) -> str:
+
     schema = kuzu_db_manager.get_schema_dict
     schema_xml = kuzu_db_manager.get_schema_xml(schema)
 
-    pruned_schema = await track_baml_call(
-        b.PruneSchema,
-        "prune_schema_collector",
-        "pruned_schema",
-        schema_xml,
-        question
-    )
+    pruned_schema = await b.PruneSchema(schema_xml, question)
 
     pruned_schema_xml = kuzu_db_manager.get_schema_xml(pruned_schema.model_dump())
+
     print("Generated pruned schema XML")
     return pruned_schema_xml
 
 
-@opik.track(flush=True)
 async def answer_question(question: str, context: str) -> str:
-    answer = await track_baml_call(
-        b.AnswerQuestion,
-        "answer_question_collector",
-        "answer_question",
-        question,
-        context
-    )
+    answer = await b.AnswerQuestion(question, context)
+    
     return answer
 
 
-@opik.track(flush=True)
 async def execute_graph_rag(question: str, schema_xml: str, important_entities: str) -> str:
-    response_cypher = await track_baml_call(
-        b.Text2Cypher,
-        "execute_graph_rag_collector",
-        "execute_graph_rag",
-        question,
-        schema_xml,
-        important_entities
-    )
+    response_cypher = await b.Text2Cypher(question, schema_xml, important_entities)
     
     if response_cypher.cypher:
         # Run the Cypher query on the graph database
@@ -96,21 +72,10 @@ async def execute_graph_rag(question: str, schema_xml: str, important_entities: 
         """
     )
     
-    # Update opik context with additional metadata
-    opik_context.update_current_span(
-        name="execute_graph_rag",
-        metadata={
-            "cypher_generated": bool(response_cypher.cypher),
-            "cypher":response_cypher.cypher,
-            "result_count": len(result) if result else 0,
-        }
-    )
-    
     answer = await answer_question(question, context)
     return answer
 
 
-@opik.track(flush=True)
 async def execute_vector_and_fts_rag(
     question: str, schema_xml: str, important_entities: str, top_k: int = 2
 ) -> str:
@@ -131,58 +96,27 @@ async def execute_vector_and_fts_rag(
         context = " ".join([f"{row['note']}\n" for row in response_dicts])
         print("Generated vector context")
         
-        # Update opik context with vector search data
-        opik_context.update_current_span(
-            name="execute_vector_and_fts_rag",
-            metadata={
-                "top_k": top_k,
-                "entities_found": bool(important_entities),
-                "results_count": len(response_dicts),
-                "search_type": "hybrid",
-            },
-        )
     else:
         print("[INFO]: No important entities found, skipping querying vector database...")
         context = ""
-        
-        # Update opik context for skipped search
-        opik_context.update_current_span(
-            name="execute_vector_and_fts_rag",
-            metadata={
-                "top_k": top_k,
-                "entities_found": False,
-                "results_count": 0,
-                "search_type": "skipped",
-            },
-        )
     
     return context
 
 
-@opik.track(flush=True)
 async def get_vector_context(question, pruned_schema_xml, important_entities, top_k=2):
     return await execute_vector_and_fts_rag(question, pruned_schema_xml, important_entities, top_k)
 
 
-@opik.track(flush=True)
 async def get_graph_answer(question, pruned_schema_xml, important_entities):
     return await execute_graph_rag(question, pruned_schema_xml, important_entities)
 
 
-@opik.track(flush=True)
 async def extract_entity_keywords(question: str, pruned_schema_xml: str):
-    entities = await track_baml_call(
-        b.ExtractEntityKeywords,
-        "extract_entity_keywords_collector",
-        "extract_entity_keywords",
-        question,
-        pruned_schema_xml,
-        additional_metadata={"entities_extracted": lambda: len(entities)}
-    )
+    entities = await b.ExtractEntityKeywords(question, pruned_schema_xml)
+    
     return entities
 
 
-@opik.track(flush=True)
 async def run_hybrid_rag(question: str) -> tuple[str, str]:
     print(f"---\nQ: {question}")
     
@@ -207,59 +141,21 @@ async def run_hybrid_rag(question: str) -> tuple[str, str]:
     # Await both vector answer generation and graph answer generation before returning
     vector_answer, graph_answer = await asyncio.gather(vector_answer_task, graph_answer_task)
     
-    # Update opik context with workflow summary
-    opik_context.update_current_span(
-        name="run_hybrid_rag",
-        metadata={
-            "question": question,
-            "entities_extracted": len(entities),
-            "vector_context_generated": bool(vector_context),
-            "graph_answer_generated": bool(graph_answer),
-        },
-    )
-    
     return vector_answer, graph_answer
 
 
-@opik.track(flush=True)
 async def synthesize_answers(question: str, vector_answer: str, graph_answer: str) -> str:
-    synthesized_answer = await track_baml_call(
-        b.SynthesizeAnswers,
-        "synthesize_answers_collector",
-        "synthesize_answers",
-        question,
-        vector_answer,
-        graph_answer
-    )
+    synthesized_answer = await b.SynthesizeAnswers(question, vector_answer, graph_answer)
+        
     return synthesized_answer
 
 
-@opik.track(flush=True)
-async def main(question: str, question_number: int = None) -> None:
+async def main(question: str) -> None:
     vector_answer, graph_answer = await run_hybrid_rag(question)
     print(f"A1: {vector_answer}A2: {graph_answer}")
     synthesized_answer = await synthesize_answers(question, vector_answer, graph_answer)
     print(f"Final answer: {synthesized_answer}")
     
-
-    
-    # Update the current trace with overall workflow information
-    trace_name = f"RAG Workflow - Question {question_number}" if question_number else "RAG Workflow"
-    opik_context.update_current_trace(
-        name=trace_name,
-        input={"question": question},
-        output={"final_answer": synthesized_answer},
-        metadata={
-            "workflow_type": "hybrid_rag",
-            "question_number": question_number,
-            "vector_answer_length": len(vector_answer),
-            "graph_answer_length": len(graph_answer),
-            "synthesized_answer_length": len(synthesized_answer),
-            "has_vector_answer": bool(vector_answer),
-            "has_graph_answer": bool(graph_answer),
-        },
-        tags=["rag", "hybrid", "fhir", "healthcare"]
-    )
 
 
 if __name__ == "__main__":
@@ -275,5 +171,5 @@ if __name__ == "__main__":
         "How many patients are immunized for influenza?",
         "How many substances cause allergies in the category 'food'?",
     ]
-    for i, question in enumerate(questions, 1):
-        asyncio.run(main(question, question_number=i)) 
+    for question in questions:
+        asyncio.run(main(question))
