@@ -23,7 +23,7 @@ from opik.integrations.openai import track_openai
 
 import utils
 from baml_client.async_client import b
-from baml_instrumentation import BAMLInstrumentation, track_baml_call
+from baml_instrumentation import BAMLInstrumentation, track_baml_call, run_post_call_metrics
 
 # Load environment variables
 load_dotenv()
@@ -56,6 +56,12 @@ if OPIK_API_KEY and OPIK_WORKSPACE:
     os.environ["OPIK_API_KEY"] = OPIK_API_KEY
     os.environ["OPIK_WORKSPACE"] = OPIK_WORKSPACE
     os.environ["OPIK_PROJECT_NAME"] = OPIK_PROJECT_NAME
+    
+    # Set OpenRouter API key for Opik metrics (LLM as a Judge)
+    if OPENROUTER_API_KEY:
+        os.environ["OPENROUTER_API_KEY"] = OPENROUTER_API_KEY
+    else:
+        print("Warning: OPENROUTER_API_KEY not set. Opik metrics may fail.")
 else:
     print(
         "Please set the OPIK_API_KEY and OPIK_WORKSPACE environment variables to enable opik tracking"
@@ -211,7 +217,26 @@ async def extract_entity_keywords(question: str, pruned_schema_xml: str):
         pruned_schema_xml,
         additional_metadata={"entities_extracted": lambda: len(entities)}
     )
+
+    # Convert entities to a string representation for metrics
+    entities_str = "\n".join([f"- key: {entity.key}\n  value: {entity.value}" for entity in entities])
+    
+    # Use Opik Contains metric to check if the question contains the extracted entities
+    await run_post_call_metrics(
+        "extract_entity_keywords_collector",
+        "extract_entity_keywords",
+        input=question,
+        output=question,  # The question is what we're checking
+        context=[pruned_schema_xml],
+        metrics=[
+            {"type": "Contains", "params": {"output": question, "reference": entities_str}}
+        ]
+    )
+
     return entities
+
+
+
 
 
 @opik.track(flush=True)
@@ -261,8 +286,23 @@ async def synthesize_answers(question: str, vector_answer: str, graph_answer: st
         "synthesize_answers",
         question,
         vector_answer,
-        graph_answer
+        graph_answer,
     )
+    
+    # Run metrics after the BAML call completes
+    await run_post_call_metrics(
+        "synthesize_answers_collector",
+        "synthesize_answers",
+        input=question,
+        output=synthesized_answer,
+        context=[graph_answer + vector_answer],
+        metrics=[
+            {"type": "Hallucination", "params": {"model": "openrouter/openai/gpt-4o"}},
+            {"type": "AnswerRelevance", "params": {"model": "openrouter/openai/gpt-4o"}},
+            {"type": "Moderation", "params": {"model": "openrouter/openai/gpt-4o"}},
+        ]
+    )
+    
     return synthesized_answer
 
 
@@ -319,7 +359,13 @@ async def run_evaluation() -> None:
         tags=["rag", "evaluation", "fhir", "healthcare", "suite"]
     )
     
-    for i, question in enumerate(questions, 1):
+    # Get number of questions to evaluate, default to all questions
+    num_questions = int(os.environ.get("NUM_EVAL_QUESTIONS", len(questions)))
+    
+    # Ensure num_questions doesn't exceed available questions
+    num_questions = min(num_questions, len(questions))
+    
+    for i, question in enumerate(questions[:num_questions], 1):
         result = await generate_response(question, question_number=i)
         print(f"Answer {i}: {result}")
         print("-" * 80)
