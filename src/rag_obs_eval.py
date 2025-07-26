@@ -32,6 +32,9 @@ OPIK_API_KEY = os.environ.get("OPIK_API_KEY")
 OPIK_WORKSPACE = os.environ.get("OPIK_WORKSPACE")
 OPIK_PROJECT_NAME = "ODSC-RAG"
 
+# Set a reasonable sample rate for metrics to avoid overwhelming the system
+os.environ["METRICS_SAMPLE_RATE"] = "0.05"  # 5% of calls will run metrics
+
 # Configure BAML logging
 os.environ["BAML_LOG"] = "WARN"
 
@@ -50,8 +53,6 @@ headers = {
 }
 
 # Configure Opik
-opik.configure(use_local=False)
-
 if OPIK_API_KEY and OPIK_WORKSPACE:
     os.environ["OPIK_API_KEY"] = OPIK_API_KEY
     os.environ["OPIK_WORKSPACE"] = OPIK_WORKSPACE
@@ -62,10 +63,17 @@ if OPIK_API_KEY and OPIK_WORKSPACE:
         os.environ["OPENROUTER_API_KEY"] = OPENROUTER_API_KEY
     else:
         print("Warning: OPENROUTER_API_KEY not set. Opik metrics may fail.")
+    
+    # Configure Opik for cloud usage
+    opik.configure(use_local=False)
+    print("Opik configured for cloud tracking")
 else:
     print(
         "Please set the OPIK_API_KEY and OPIK_WORKSPACE environment variables to enable opik tracking"
     )
+    # Disable Opik tracking if credentials are not provided
+    opik.configure(use_local=True)
+    print("Opik configured for local tracking (no cloud credentials)")
 
 
 # Core RAG Functions
@@ -236,9 +244,6 @@ async def extract_entity_keywords(question: str, pruned_schema_xml: str):
     return entities
 
 
-
-
-
 @opik.track(flush=True)
 async def run_hybrid_rag(question: str, question_number: int = None) -> tuple[str, str]:
     print(f"---\nQuestion {question_number}: {question}")
@@ -280,6 +285,27 @@ async def run_hybrid_rag(question: str, question_number: int = None) -> tuple[st
 
 @opik.track(flush=True)
 async def synthesize_answers(question: str, vector_answer: str, graph_answer: str) -> str:
+    # Simple manual comparison of vector and graph answers
+    if vector_answer and graph_answer:
+        # Basic consistency check
+        vector_words = set(vector_answer.lower().split())
+        graph_words = set(graph_answer.lower().split())
+        common_words = vector_words.intersection(graph_words)
+        similarity = len(common_words) / max(len(vector_words), len(graph_words)) if max(len(vector_words), len(graph_words)) > 0 else 0
+        
+        print(f"[INFO] Simple similarity score: {similarity:.3f}")
+        
+        # Update Opik context with simple comparison
+        opik_context.update_current_span(
+            name="simple_answer_comparison",
+            metadata={
+                "vector_answer_length": len(vector_answer),
+                "graph_answer_length": len(graph_answer),
+                "simple_similarity_score": similarity,
+                "common_words_count": len(common_words),
+            }
+        )
+    
     synthesized_answer = await track_baml_call(
         b.SynthesizeAnswers,
         "synthesize_answers_collector",
@@ -300,6 +326,7 @@ async def synthesize_answers(question: str, vector_answer: str, graph_answer: st
             {"type": "Hallucination", "params": {"model": "openrouter/openai/gpt-4o"}},
             {"type": "AnswerRelevance", "params": {"model": "openrouter/openai/gpt-4o"}},
             {"type": "Moderation", "params": {"model": "openrouter/openai/gpt-4o"}},
+            {"type": "Usefulness", "params": {"model": "openrouter/openai/gpt-4o"}},
         ]
     )
     
@@ -311,6 +338,8 @@ async def synthesize_answers(question: str, vector_answer: str, graph_answer: st
 async def generate_response(question: str, question_number: int = None) -> str | None:
     graph_answer, vector_answer = await run_hybrid_rag(question, question_number)
     synthesized_answer = await synthesize_answers(question, vector_answer, graph_answer)
+    
+
     
     # Update the current span with question-specific information
     span_name = f"Question {question_number}" if question_number else "Question"
@@ -329,7 +358,6 @@ async def generate_response(question: str, question_number: int = None) -> str |
     )
     
     return synthesized_answer
-
 
 
 @opik.track(flush=True)

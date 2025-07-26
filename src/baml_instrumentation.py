@@ -16,7 +16,14 @@ from opik.evaluation.metrics import (
     Contains,
     AnswerRelevance,
     Moderation,
+    Usefulness,
+    ContextRecall,
+    ContextPrecision,
+    base_metric,
+    score_result,
 )
+
+
 
 class BAMLInstrumentation:
     """
@@ -104,7 +111,8 @@ class BAMLInstrumentation:
             effective_sample_rate = sample_rate
         else:
             # Read directly from env var, fall back to instance sample_rate
-            env_sample_rate = os.environ.get("METRICS_SAMPLE_RATE")
+            import os as os_module
+            env_sample_rate = os_module.environ.get("METRICS_SAMPLE_RATE")
             effective_sample_rate = float(env_sample_rate) if env_sample_rate else self.sample_rate
         
         # Check if we should run metrics based on sample rate
@@ -138,16 +146,53 @@ class BAMLInstrumentation:
                     model = params.get("model", "openrouter/openai/gpt-4o")
                     metric = Moderation(track = True, model=model, **{k: v for k, v in params.items() if k != "model"})
                     score_result = await metric.ascore(output=output)
+                elif metric_type == "Usefulness":
+                    # Extract model parameter from params or use default
+                    model = params.get("model", "openrouter/openai/gpt-4o")
+                    metric = Usefulness(track = True, model=model, **{k: v for k, v in params.items() if k != "model"})
+                    score_result = await metric.ascore(input=input, output=output)
+                elif metric_type == "ContextRecall":
+                    # Extract model parameter from params or use default
+                    model = params.get("model", "openrouter/openai/gpt-4o")
+                    metric = ContextRecall(track = True, model=model, **{k: v for k, v in params.items() if k != "model"})
+                    score_result = await metric.ascore(output=output, context=context)
+                elif metric_type == "ContextPrecision":
+                    # Extract model parameter from params or use default    
+                    model = params.get("model", "openrouter/openai/gpt-4o")
+                    metric = ContextPrecision(track = True, model=model, **{k: v for k, v in params.items() if k != "model"})
+                    score_result = await metric.ascore(output=output, context=context)
+
                 else:
                     continue  # Unknown metric type
                 # Handle both sync and async score results
                 if hasattr(score_result, 'value'):
                     value = score_result.value
                     reason = getattr(score_result, "reason", None)
-                else:
-                    # For async results, the score_result might be the value directly
+                elif isinstance(score_result, (int, float)):
+                    # Direct numeric value
                     value = score_result
                     reason = None
+                elif score_result is None:
+                    value = None
+                    reason = "No result returned"
+                else:
+                    # Try to convert to string and extract numeric value
+                    try:
+                        value = float(str(score_result))
+                        reason = str(score_result)
+                    except (ValueError, TypeError):
+                        value = None
+                        reason = f"Could not parse result: {score_result}"
+                
+                # Ensure value is a valid number, skip if None or invalid
+                if value is None or not isinstance(value, (int, float)):
+                    print(f"[WARNING] Skipping metric {metric_type} with invalid value: {value}")
+                    continue
+                
+                # Ensure value is within valid range (0-1 for most metrics)
+                if value < 0 or value > 1:
+                    print(f"[WARNING] Metric {metric_type} value {value} out of range [0,1], clamping")
+                    value = max(0.0, min(1.0, value))
                 
                 metric_results.append({
                     "name": metric_type,
@@ -207,6 +252,13 @@ class BAMLInstrumentation:
                     "completion_tokens": call.usage.output_tokens,
                     "total_tokens": (call.usage.input_tokens or 0) + (call.usage.output_tokens or 0),
                 }
+
+                # Get pricing from environment variables with sensible defaults
+                prompt_price_per_1k = float(os.environ.get("PROMPT_PRICE_PER_1K", "0.0005"))  # Default $0.0005 per 1k tokens
+                completion_price_per_1k = float(os.environ.get("COMPLETION_PRICE_PER_1K", "0.000009"))  # Default $0.000009 per 1k tokens
+                
+                # Calculate cost
+                cost = (usage["prompt_tokens"] / 1000) * prompt_price_per_1k + (usage["completion_tokens"] / 1000) * completion_price_per_1k
                 
                 opik_context.update_current_span(
                     name=span_name,
@@ -214,6 +266,7 @@ class BAMLInstrumentation:
                     usage=usage,
                     provider=call.provider,
                     model=call.client_name,
+                    total_cost=cost,
                 )
 
 
