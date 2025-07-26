@@ -24,6 +24,8 @@ from opik.integrations.openai import track_openai
 import utils
 from baml_client.async_client import b
 from baml_instrumentation import BAMLInstrumentation, track_baml_call, run_post_call_metrics
+from guardrails import EmailGuardrail, GuardrailAction, GuardrailSeverity, validate_input_with_guardrails, validate_output_with_guardrails
+from enhanced_guardrail_integration import EnhancedGuardrailManager
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +39,20 @@ os.environ["METRICS_SAMPLE_RATE"] = "0.05"  # 5% of calls will run metrics
 
 # Configure BAML logging
 os.environ["BAML_LOG"] = "WARN"
+
+# Configure guardrails
+GUARDRAILS_ENABLED = os.environ.get("GUARDRAILS_ENABLED", "true").lower() == "true"
+
+# Initialize enhanced guardrail manager for better tracing
+if GUARDRAILS_ENABLED:
+    enhanced_guardrail_manager = EnhancedGuardrailManager([
+        EmailGuardrail(
+            action=GuardrailAction.WARN,
+            severity=GuardrailSeverity.MEDIUM,
+            mask_emails=True,
+            block_common_domains=False
+        )
+    ])
 
 # Set embedding registry in LanceDB to use ollama
 embedding_model = get_registry().get("ollama").create(name="nomic-embed-text")
@@ -248,6 +264,29 @@ async def extract_entity_keywords(question: str, pruned_schema_xml: str):
 async def run_hybrid_rag(question: str, question_number: int = None) -> tuple[str, str]:
     print(f"---\nQuestion {question_number}: {question}")
     
+    # Apply input guardrails if enabled
+    if GUARDRAILS_ENABLED:
+        try:
+            # Use enhanced guardrail manager for better tracing
+            processed_question = await enhanced_guardrail_manager.validate_with_detailed_tracing(
+                question,
+                span_name=f"input_guardrail_validation_q{question_number}" if question_number else "input_guardrail_validation",
+                trace_tags=["rag_input", "email_validation"],
+                custom_metadata={
+                    "question_number": question_number,
+                    "workflow_step": "input_validation",
+                    "rag_type": "hybrid"
+                },
+                validation_type="input"
+            )
+            
+            if processed_question != question:
+                print(f"[INFO] Input processed by guardrails: {processed_question}")
+                question = processed_question
+                
+        except Exception as e:
+            print(f"[WARNING] Input guardrail validation failed: {e}")
+    
     pruned_schema_xml = await prune_schema(question)
     entities = await extract_entity_keywords(question, pruned_schema_xml)
     important_entities = " ".join(
@@ -315,6 +354,30 @@ async def synthesize_answers(question: str, vector_answer: str, graph_answer: st
         graph_answer,
     )
     
+    # Apply output guardrails if enabled
+    if GUARDRAILS_ENABLED:
+        try:
+            # Use enhanced guardrail manager for better tracing
+            processed_answer = await enhanced_guardrail_manager.validate_with_detailed_tracing(
+                synthesized_answer,
+                span_name=f"output_guardrail_validation_q{question_number}" if 'question_number' in locals() else "output_guardrail_validation",
+                trace_tags=["rag_output", "email_validation"],
+                custom_metadata={
+                    "question_number": question_number if 'question_number' in locals() else None,
+                    "workflow_step": "output_validation",
+                    "rag_type": "hybrid",
+                    "answer_length": len(synthesized_answer)
+                },
+                validation_type="output"
+            )
+            
+            if processed_answer != synthesized_answer:
+                print(f"[INFO] Output processed by guardrails")
+                synthesized_answer = processed_answer
+                
+        except Exception as e:
+            print(f"[WARNING] Output guardrail validation failed: {e}")
+    
     # Run metrics after the BAML call completes
     await run_post_call_metrics(
         "synthesize_answers_collector",
@@ -364,6 +427,7 @@ async def generate_response(question: str, question_number: int = None) -> str |
 async def run_evaluation() -> None:
     """Run the evaluation suite with predefined questions."""
     questions = [
+        "Do any patients have the email address 'joseph.klein@example.com'? If so, what is their full name and what is the full name of the practitioner who treated them?"
         "How many patients with the last name 'Rosenbaum' received multiple immunizations?",
         "What are the full names of the patients treated by the practitioner named Josef Klein?",
         "Did the practitioner 'Arla Fritsch' treat more than one patient?",
