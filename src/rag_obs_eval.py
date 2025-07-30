@@ -427,9 +427,9 @@ async def generate_response(question: str, question_number: int = None) -> str |
 async def run_evaluation() -> None:
     """Run the evaluation suite with predefined questions."""
     questions = [
-        "Do any patients have the email address 'joseph.klein@example.com'? If so, what is their full name and what is the full name of the practitioner who treated them?"
         "How many patients with the last name 'Rosenbaum' received multiple immunizations?",
         "What are the full names of the patients treated by the practitioner named Josef Klein?",
+        "Do any patients have the email address 'joseph.klein@example.com'? If so, what is their full name and what is the full name of the practitioner who treated them?"
         "Did the practitioner 'Arla Fritsch' treat more than one patient?",
         "What are the unique categories of substances patients are allergic to?",
         "How many patients were born in between the years 1990 and 2000?",
