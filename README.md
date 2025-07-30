@@ -148,3 +148,28 @@ your Kuzu graph database file into the G.V() desktop app, and you're good to go!
 The full graph as visualized in G.V() is shown below:
 
 ![](./assets/fhir-graph-gdotv.png)
+
+## Running the evaluation program
+
+The `rag_obs_eval.py` script provides a comprehensive evaluation framework for the hybrid RAG system. It runs a suite of predefined questions through the complete pipeline, combining graph-based RAG (using Kuzu) with vector and full-text search RAG (using LanceDB). The evaluation is instrumented with [Opik](https://www.comet.com/site/products/opik/) observability to provide detailed tracing and metrics for each stage of the workflow.
+
+To run the evaluation:
+
+```bash
+cd src
+uv run rag_obs_eval.py
+```
+
+The evaluation program demonstrates several key features:
+
+- **Hybrid RAG**: Combines graph queries with vector search for comprehensive information retrieval
+- **BAML Instrumentation**: All BAML function calls are tracked with detailed usage metrics, timing, and cost analysis
+- **Guardrails Integration**: Input and output validation with configurable email detection and masking
+- **Observability**: Complete tracing of the RAG pipeline with Opik spans and metrics
+- **Evaluation Metrics**: Automated scoring using Heuristics & LLM-as-a-judge for contains check, hallucination detection, answer relevance, moderation, and usefulness
+
+The program processes a set of healthcare-related questions and generates synthesized answers by combining results from both graph and vector search approaches. Each step is instrumented to provide visibility into the system's performance and behavior.
+
+For detailed information about the instrumentation and guardrails implementation, see:
+- [BAML Instrumentation Guide](src/BAML_INSTRUMENTATION_README.md)
+- [Guardrails Implementation](src/GUARDRAILS_README.md)
