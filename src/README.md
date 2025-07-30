@@ -165,20 +165,15 @@ have subjective answers in the next section.
 We'll use the Opik observability platform to evaluate the RAG system in a more granular way, by sending
 traces of our LLM outputs to Opik and creating experiments to evaluate the quality of the RAG system.
 
-Set up an Opik account and a workspace. Store the required environment variables in the `.env` file
-shown below.
+Set up an Opik account, and create a new project and workspace. Store the required environment variables
+in the `.env` file as shown below.
 
 ```
-# Opik API key
 OPIK_API_KEY=
-# Opik workspace name
+OPIK_PROJECT_NAME=
 OPIK_WORKSPACE=
 ```
 
-You can then run the code in the script `rag_eval.py` to begin logging traces on Opik.
-
-```bash
-uv run rag_eval.py
-```
-
-More code is on the way!
+Then, read the following docs for more details:
+- [BAML instrumentation](BAML_INSTRUMENTATION_README.md)
+- [Guardrails](GUARDRAILS_README.md)

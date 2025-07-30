@@ -148,10 +148,3 @@ your Kuzu graph database file into the G.V() desktop app, and you're good to go!
 The full graph as visualized in G.V() is shown below:
 
 ![](./assets/fhir-graph-gdotv.png)
-
-
-
-
-
-
-
