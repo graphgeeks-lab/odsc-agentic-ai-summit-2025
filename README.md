@@ -170,6 +170,56 @@ The evaluation program demonstrates several key features:
 
 The program processes a set of healthcare-related questions and generates synthesized answers by combining results from both graph and vector search approaches. Each step is instrumented to provide visibility into the system's performance and behavior.
 
+## Viewing results in the Opik Dashboard
+
+After running the evaluation program, you can view detailed results and metrics in the Opik Dashboard. The evaluation generates comprehensive traces that include:
+
+- **Complete workflow traces** showing the execution flow of each question
+- **BAML function calls** with timing, token usage, and cost analysis
+- **Guardrail validations** for input and output processing
+- **Evaluation metrics** including hallucination detection, answer relevance, moderation, and usefulness scores
+- **Performance data** for each stage of the hybrid RAG pipeline
+
+### Setting up Opik access
+
+You have two options for accessing the Opik Dashboard:
+
+#### Option 1: Opik Cloud (Recommended for workshop participants)
+
+1. **Create a free account** at [Opik Cloud](https://www.comet.com/site/products/opik/)
+2. **Set up environment variables** in your `.env` file:
+   ```bash
+   OPIK_API_KEY=your_api_key_here
+   OPIK_WORKSPACE=your_workspace_name
+   OPIK_PROJECT_NAME=ODSC-RAG
+   ```
+3. **Run the evaluation** - traces will automatically be sent to your Opik Cloud project
+4. **Access the dashboard** at the URL provided in the console output after running the evaluation
+
+#### Option 2: Local Opik deployment
+
+For users who prefer to run Opik locally:
+
+1. **Deploy Opik locally** following the [Opik documentation](https://www.comet.com/docs/opik/self-host/overview)
+2. **Configure for local usage** by setting `opik.configure(use_local=True)` in the evaluation script
+3. **Access the local dashboard** at your local Opik instance URL
+
+### Navigating the Opik Dashboard
+
+Once you have access to the Opik Dashboard, you can explore the evaluation results through:
+
+- **Traces view**: See the complete execution flow for each question
+- **Spans view**: Drill down into individual function calls and their performance
+- **Metrics view**: Analyze evaluation scores and performance metrics
+- **Feedback scores**: Review LLM-as-a-judge evaluations for answer quality
+- **Usage analytics**: Monitor token consumption and costs across the pipeline
+
+The dashboard provides interactive visualizations that help you understand:
+- Which questions performed best/worst
+- Where bottlenecks occur in the RAG pipeline
+- How guardrails are protecting sensitive data
+- Cost analysis for different components of the system
+
 For detailed information about the instrumentation and guardrails implementation, see:
 - [BAML Instrumentation Guide](src/BAML_INSTRUMENTATION_README.md)
 - [Guardrails Implementation](src/GUARDRAILS_README.md)
