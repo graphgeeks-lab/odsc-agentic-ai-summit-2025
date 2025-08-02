@@ -4,9 +4,9 @@ Let's look at the sequence of steps that we take to build a knowledge graph from
 text, store it in a graph and vector database, and build a hybrid RAG system whose performance we
 then evaluate.
 
-## 1. Data extraction
+## 1. Structured data extraction
 
-We start by extracting the data from the FHIR graph database using BAML.
+We begin by extracting structured data from the FHIR graph database using BAML.
 
 ```bash
 uv run baml_extract.py
