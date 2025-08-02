@@ -148,3 +148,78 @@ your Kuzu graph database file into the G.V() desktop app, and you're good to go!
 The full graph as visualized in G.V() is shown below:
 
 ![](./assets/fhir-graph-gdotv.png)
+
+## Running the evaluation program
+
+The `rag_obs_eval.py` script provides a comprehensive evaluation framework for the hybrid RAG system. It runs a suite of predefined questions through the complete pipeline, combining graph-based RAG (using Kuzu) with vector and full-text search RAG (using LanceDB). The evaluation is instrumented with [Opik](https://www.comet.com/site/products/opik/) observability to provide detailed tracing and metrics for each stage of the workflow.
+
+To run the evaluation:
+
+```bash
+cd src
+uv run rag_obs_eval.py
+```
+
+The evaluation program demonstrates several key features:
+
+- **Hybrid RAG**: Combines graph queries with vector search for comprehensive information retrieval
+- **BAML Instrumentation**: All BAML function calls are tracked with detailed usage metrics, timing, and cost analysis
+- **Guardrails Integration**: Input and output validation with configurable email detection and masking
+- **Observability**: Complete tracing of the RAG pipeline with Opik spans and metrics
+- **Evaluation Metrics**: Automated scoring using Heuristics & LLM-as-a-judge for contains check, hallucination detection, answer relevance, moderation, and usefulness
+
+The program processes a set of healthcare-related questions and generates synthesized answers by combining results from both graph and vector search approaches. Each step is instrumented to provide visibility into the system's performance and behavior.
+
+## Viewing results in the Opik Dashboard
+
+After running the evaluation program, you can view detailed results and metrics in the Opik Dashboard. The evaluation generates comprehensive traces that include:
+
+- **Complete workflow traces** showing the execution flow of each question
+- **BAML function calls** with timing, token usage, and cost analysis
+- **Guardrail validations** for input and output processing
+- **Evaluation metrics** including hallucination detection, answer relevance, moderation, and usefulness scores
+- **Performance data** for each stage of the hybrid RAG pipeline
+
+### Setting up Opik access
+
+You have two options for accessing the Opik Dashboard:
+
+#### Option 1: Opik Cloud (Recommended for workshop participants)
+
+1. **Create a free account** at [Opik Cloud](https://www.comet.com/site/products/opik/)
+2. **Set up environment variables** in your `.env` file:
+   ```bash
+   OPIK_API_KEY=your_api_key_here
+   OPIK_WORKSPACE=your_workspace_name
+   OPIK_PROJECT_NAME=ODSC-RAG
+   ```
+3. **Run the evaluation** - traces will automatically be sent to your Opik Cloud project
+4. **Access the dashboard** at the URL provided in the console output after running the evaluation
+
+#### Option 2: Local Opik deployment
+
+For users who prefer to run Opik locally:
+
+1. **Deploy Opik locally** following the [Opik documentation](https://www.comet.com/docs/opik/self-host/overview)
+2. **Configure for local usage** by setting `opik.configure(use_local=True)` in the evaluation script
+3. **Access the local dashboard** at your local Opik instance URL
+
+### Navigating the Opik Dashboard
+
+Once you have access to the Opik Dashboard, you can explore the evaluation results through:
+
+- **Traces view**: See the complete execution flow for each question
+- **Spans view**: Drill down into individual function calls and their performance
+- **Metrics view**: Analyze evaluation scores and performance metrics
+- **Feedback scores**: Review LLM-as-a-judge evaluations for answer quality
+- **Usage analytics**: Monitor token consumption and costs across the pipeline
+
+The dashboard provides interactive visualizations that help you understand:
+- Which questions performed best/worst
+- Where bottlenecks occur in the RAG pipeline
+- How guardrails are protecting sensitive data
+- Cost analysis for different components of the system
+
+For detailed information about the instrumentation and guardrails implementation, see:
+- [BAML Instrumentation Guide](src/BAML_INSTRUMENTATION_README.md)
+- [Guardrails Implementation](src/GUARDRAILS_README.md)
