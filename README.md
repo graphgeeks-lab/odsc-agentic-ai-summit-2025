@@ -88,13 +88,13 @@ search on the data.
 
 There are two parts to the evaluation on our system:
 
-1. Evaluating the quality of the graph construction
+1. Evaluating the quality of the structured data extraction
 2. Evaluating the quality of the Graph RAG and agent pipeline
 
-#### 1. Graph construction evaluation
+#### 1. Structured data evaluation
 
-The evaluation data in `data/fhir.json` is used to evaluate the
-quality of results from the information extraction pipeline in BAML.
+The evaluation of the structured data in `data/fhir.json` is used to gauge the
+quality of the structured information extraction from BAML.
 
 See the [evaluation script](src/baml_extract_eval.py).
 
